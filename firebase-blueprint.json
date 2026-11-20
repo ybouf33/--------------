@@ -1,0 +1,397 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile and language/building preferences.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "preferredLang": { "type": "string", "enum": ["AR", "FR"] },
+        "activeBuildingId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "displayName", "preferredLang", "createdAt", "updatedAt"]
+    },
+    "UserMembership": {
+      "title": "UserMembership",
+      "description": "User-scoped index linking a user to buildings they joined or created.",
+      "type": "object",
+      "properties": {
+        "buildingId": { "type": "string" },
+        "buildingName": { "type": "string" },
+        "city": { "type": "string" },
+        "apartmentLabel": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["buildingId", "buildingName", "city", "createdAt", "updatedAt"]
+    },
+    "InviteCode": {
+      "title": "InviteCode",
+      "description": "6-character invite code lookup record for joining a building.",
+      "type": "object",
+      "properties": {
+        "buildingId": { "type": "string" },
+        "buildingName": { "type": "string" },
+        "city": { "type": "string" },
+        "syndicUid": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["buildingId", "buildingName", "city", "syndicUid", "active", "createdAt", "updatedAt"]
+    },
+    "Building": {
+      "title": "Building",
+      "description": "Co-ownership building/residence workspace governed under Moroccan Law 18-00.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "city": { "type": "string" },
+        "neighborhood": { "type": "string" },
+        "floorCount": { "type": "integer" },
+        "apartmentCount": { "type": "integer" },
+        "defaultMonthlyFee": { "type": "number" },
+        "reserveFundBalance": { "type": "number" },
+        "inviteCode": { "type": "string" },
+        "syndicUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "city", "floorCount", "apartmentCount", "defaultMonthlyFee", "reserveFundBalance", "inviteCode", "syndicUid", "createdAt", "updatedAt"]
+    },
+    "BuildingMember": {
+      "title": "BuildingMember",
+      "description": "Authoritative RBAC membership record for a resident, deputy, or syndic inside a building.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "apartmentId": { "type": "string" },
+        "apartmentLabel": { "type": "string" },
+        "occupancyType": { "type": "string", "enum": ["OWNER", "TENANT"] },
+        "role": { "type": "string", "enum": ["SYNDIC", "DEPUTY", "RESIDENT"] },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "phone": { "type": "string" },
+        "phoneKey": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "apartmentLabel", "occupancyType", "role", "status", "createdAt", "updatedAt"]
+    },
+    "Apartment": {
+      "title": "Apartment",
+      "description": "Individual lot/apartment/shop within a building with optional custom monthly cotisation.",
+      "type": "object",
+      "properties": {
+        "unitNumber": { "type": "string" },
+        "floor": { "type": "integer" },
+        "label": { "type": "string" },
+        "unitType": { "type": "string", "enum": ["APARTMENT", "SHOP", "DUPLEX"] },
+        "monthlyFee": { "type": "number" },
+        "residentName": { "type": "string" },
+        "residentPhone": { "type": "string" },
+        "occupancyType": { "type": "string", "enum": ["OWNER", "TENANT"] },
+        "residentUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["unitNumber", "floor", "label", "unitType", "monthlyFee", "createdAt", "updatedAt"]
+    },
+    "CotisationPayment": {
+      "title": "CotisationPayment",
+      "description": "Monthly condo fee payment record per apartment.",
+      "type": "object",
+      "properties": {
+        "apartmentId": { "type": "string" },
+        "apartmentLabel": { "type": "string" },
+        "monthKey": { "type": "string" },
+        "amountMad": { "type": "number" },
+        "status": { "type": "string", "enum": ["PAID", "PENDING", "OVERDUE"] },
+        "payerName": { "type": "string" },
+        "paymentMethod": { "type": "string", "enum": ["CASH", "TRANSFER", "CHECK"] },
+        "receiptNumber": { "type": "string" },
+        "paidAtLabel": { "type": "string" },
+        "recordedByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["apartmentId", "apartmentLabel", "monthKey", "amountMad", "status", "paymentMethod", "recordedByUid", "createdAt", "updatedAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Categorized building expense with mandatory invoice photo proof.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["CLEANING", "SECURITY", "UTILITIES", "ELEVATOR", "REPAIRS", "OTHER"] },
+        "amountMad": { "type": "number" },
+        "vendorName": { "type": "string" },
+        "expenseDateLabel": { "type": "string" },
+        "invoicePhotoBase64": { "type": "string" },
+        "notes": { "type": "string" },
+        "recordedByUid": { "type": "string" },
+        "recordedByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "amountMad", "expenseDateLabel", "invoicePhotoBase64", "recordedByUid", "recordedByName", "createdAt", "updatedAt"]
+    },
+    "BuildingIssue": {
+      "title": "BuildingIssue",
+      "description": "Resident-reported maintenance issue with status workflow and upvoting.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["PLUMBING", "ELECTRICAL", "ELEVATOR", "CLEANING", "SECURITY", "STRUCTURAL"] },
+        "urgency": { "type": "string", "enum": ["NORMAL", "URGENT", "EMERGENCY"] },
+        "status": { "type": "string", "enum": ["UNDER_REVIEW", "IN_PROGRESS", "RESOLVED"] },
+        "photoBase64": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "apartmentLabel": { "type": "string" },
+        "repairCostNote": { "type": "string" },
+        "upvoteCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "category", "urgency", "status", "authorUid", "authorName", "upvoteCount", "createdAt", "updatedAt"]
+    },
+    "IssueUpvote": {
+      "title": "IssueUpvote",
+      "description": "Per-user confirmation upvote on an issue.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "IssueComment": {
+      "title": "IssueComment",
+      "description": "Comment on a building maintenance issue.",
+      "type": "object",
+      "properties": {
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "apartmentLabel": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorUid", "authorName", "text", "createdAt"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Official building notice pinned or posted by Syndic or Deputy.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "category": { "type": "string", "enum": ["WATER", "ELECTRICITY", "ELEVATOR", "CLEANING", "GENERAL_ASSEMBLY", "GENERAL"] },
+        "targetAudience": { "type": "string", "enum": ["ALL", "UNPAID", "OWNERS"] },
+        "pinned": { "type": "boolean" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "body", "category", "pinned", "authorUid", "authorName", "createdAt", "updatedAt"]
+    },
+    "Poll": {
+      "title": "Poll",
+      "description": "Digital vote for building governance and General Assembly decisions.",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string" },
+        "description": { "type": "string" },
+        "options": { "type": "array" },
+        "closed": { "type": "boolean" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["question", "options", "closed", "authorUid", "authorName", "createdAt", "updatedAt"]
+    },
+    "PollVote": {
+      "title": "PollVote",
+      "description": "Single vote cast by an approved resident.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "optionIndex": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "optionIndex", "createdAt"]
+    },
+    "BuildingContact": {
+      "title": "BuildingContact",
+      "description": "Emergency and service directory entry (Concierge, Plumber, Electrician, Elevator Tech).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "roleTitle": { "type": "string" },
+        "category": { "type": "string", "enum": ["CONCIERGE", "PLUMBER", "ELECTRICIAN", "ELEVATOR", "EMERGENCY", "SYNDIC"] },
+        "phone": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "roleTitle", "category", "phone", "createdAt", "updatedAt"]
+    },
+    "BuildingWork": {
+      "title": "BuildingWork",
+      "description": "Scheduled maintenance, contractor work order, or renovation project for a specific building.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["MAINTENANCE", "CLEANING", "ELEVATOR", "PLUMBING", "SECURITY", "RENOVATION"] },
+        "contractorName": { "type": "string" },
+        "contractorPhone": { "type": "string" },
+        "estimatedCostMad": { "type": "number" },
+        "dueDateLabel": { "type": "string" },
+        "status": { "type": "string", "enum": ["PLANNED", "IN_PROGRESS", "COMPLETED"] },
+        "notes": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "estimatedCostMad", "status", "authorUid", "createdAt", "updatedAt"]
+    },
+    "PreApprovedPhone": {
+      "title": "PreApprovedPhone",
+      "description": "Normalized Moroccan phone number pre-approved by the Syndic for instant unit verification via invite link.",
+      "type": "object",
+      "properties": {
+        "phoneKey": { "type": "string" },
+        "apartmentId": { "type": "string" },
+        "apartmentLabel": { "type": "string" },
+        "residentName": { "type": "string" },
+        "occupancyType": { "type": "string", "enum": ["OWNER", "TENANT"] },
+        "addedByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["phoneKey", "apartmentId", "apartmentLabel", "occupancyType", "addedByUid", "createdAt", "updatedAt"]
+    },
+    "BuildingNotification": {
+      "title": "BuildingNotification",
+      "description": "Real-time live notification event for building broadcasts, works, payments, and join approvals.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "type": { "type": "string", "enum": ["ANNOUNCEMENT", "WORK", "ISSUE", "PAYMENT", "MEMBER_JOIN", "GENERAL"] },
+        "targetPhoneKey": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "readByUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "body", "type", "senderUid", "senderName", "readByUids", "createdAt", "updatedAt"]
+    },
+    "ResidentAccount": {
+      "title": "ResidentAccount",
+      "description": "Sokan phone-keyed account and WhatsApp OTP recovery index (stores SHA-256 hashes only, never plaintext passwords).",
+      "type": "object",
+      "properties": {
+        "phoneKey": { "type": "string" },
+        "displayPhone": { "type": "string" },
+        "displayName": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "recoveryCodeHash": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "buildingIds": { "type": "array" },
+        "apartmentLabels": { "type": "array" },
+        "recoveryVerifiedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["phoneKey", "displayPhone", "displayName", "passwordHash", "ownerUid", "buildingIds", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile and preferences."
+    },
+    "/users/{userId}/memberships/{buildingId}": {
+      "schema": { "$ref": "#/entities/UserMembership" },
+      "description": "Buildings the user has created or requested to join."
+    },
+    "/invites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/InviteCode" },
+      "description": "Invite code directory keyed by 6-char uppercase code."
+    },
+    "/residentAccounts/{phoneKey}": {
+      "schema": { "$ref": "#/entities/ResidentAccount" },
+      "description": "Phone-keyed Sokan accounts supporting WhatsApp OTP recovery and data restoration."
+    },
+    "/buildings/{buildingId}": {
+      "schema": { "$ref": "#/entities/Building" },
+      "description": "Building metadata and treasury reserve balance."
+    },
+    "/buildings/{buildingId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/BuildingMember" },
+      "description": "Authoritative RBAC membership and approval status."
+    },
+    "/buildings/{buildingId}/preApprovedPhones/{phoneKey}": {
+      "schema": { "$ref": "#/entities/PreApprovedPhone" },
+      "description": "Phone numbers pre-assigned to apartments by the Syndic for instant invite verification."
+    },
+    "/buildings/{buildingId}/apartments/{apartmentId}": {
+      "schema": { "$ref": "#/entities/Apartment" },
+      "description": "Apartments, shops, and duplexes in the building."
+    },
+    "/buildings/{buildingId}/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/CotisationPayment" },
+      "description": "Monthly cotisation payment records."
+    },
+    "/buildings/{buildingId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Categorized expenses with invoice verification."
+    },
+    "/buildings/{buildingId}/issues/{issueId}": {
+      "schema": { "$ref": "#/entities/BuildingIssue" },
+      "description": "Building maintenance issues."
+    },
+    "/buildings/{buildingId}/issues/{issueId}/upvotes/{uid}": {
+      "schema": { "$ref": "#/entities/IssueUpvote" },
+      "description": "Issue confirmation upvotes."
+    },
+    "/buildings/{buildingId}/issues/{issueId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/IssueComment" },
+      "description": "Comments on maintenance issues."
+    },
+    "/buildings/{buildingId}/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Official building announcements."
+    },
+    "/buildings/{buildingId}/polls/{pollId}": {
+      "schema": { "$ref": "#/entities/Poll" },
+      "description": "Governance polls and General Assembly votes."
+    },
+    "/buildings/{buildingId}/polls/{pollId}/votes/{uid}": {
+      "schema": { "$ref": "#/entities/PollVote" },
+      "description": "Resident votes on a poll."
+    },
+    "/buildings/{buildingId}/contacts/{contactId}": {
+      "schema": { "$ref": "#/entities/BuildingContact" },
+      "description": "Emergency and building service contacts."
+    },
+    "/buildings/{buildingId}/works/{workId}": {
+      "schema": { "$ref": "#/entities/BuildingWork" },
+      "description": "Building maintenance projects and contractor work orders (A3mal)."
+    },
+    "/buildings/{buildingId}/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/BuildingNotification" },
+      "description": "Live in-app & push notification feed per building."
+    }
+  }
+}

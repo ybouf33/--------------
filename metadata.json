@@ -1,0 +1,6 @@
+{
+  "name": "سانديك العمارة",
+  "description": "منصة متكاملة لإدارة السانديك والملكية المشتركة في المغرب (قانون 18-00): تتبع واجبات السانديك، سجل المصاريف، الأعطال، التصويت، والإعلانات.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

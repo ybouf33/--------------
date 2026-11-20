@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">سانديك العمارة</string>
+    <string name="error_sign_in_cancelled">تم إلغاء تسجيل الدخول</string>
+    <string name="error_missing_web_client">تعذر العثور على إعدادات تسجيل الدخول</string>
+    <string name="cd_building_hero">صورة توضيحية للعمارة المغربية</string>
+    <string name="cd_onboarding_art">رسم توضيحي لسكان العمارة</string>
+    <string name="cd_empty_issues">لا توجد أعطال مسجلة حالياً</string>
+</resources>

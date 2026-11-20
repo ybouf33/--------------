@@ -1,0 +1,657 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function getBuilding(buildingId) {
+      return get(/databases/$(database)/documents/buildings/$(buildingId)).data;
+    }
+
+    function memberPath(buildingId, uid) {
+      return /databases/$(database)/documents/buildings/$(buildingId)/members/$(uid);
+    }
+
+    function hasMemberDoc(buildingId) {
+      return exists(memberPath(buildingId, request.auth.uid));
+    }
+
+    function getMember(buildingId) {
+      return get(memberPath(buildingId, request.auth.uid)).data;
+    }
+
+    function isApprovedMember(buildingId) {
+      return isSignedIn() &&
+             hasMemberDoc(buildingId) &&
+             getMember(buildingId).status == 'APPROVED';
+    }
+
+    function isSyndic(buildingId) {
+      return isApprovedMember(buildingId) &&
+             getMember(buildingId).role == 'SYNDIC';
+    }
+
+    function isSyndicOrDeputy(buildingId) {
+      return isApprovedMember(buildingId) &&
+             getMember(buildingId).role in ['SYNDIC', 'DEPUTY'];
+    }
+
+    // --- VALIDATION HELPERS ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             data.preferredLang in ['AR', 'FR'] &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+             (!('activeBuildingId' in data) || (data.activeBuildingId is string && data.activeBuildingId.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidUserMembership(data) {
+      return data.buildingId is string && data.buildingId.size() >= 1 && data.buildingId.size() <= 128 &&
+             data.buildingName is string && data.buildingName.size() >= 1 && data.buildingName.size() <= 120 &&
+             data.city is string && data.city.size() >= 1 && data.city.size() <= 80 &&
+             (!('apartmentLabel' in data) || (data.apartmentLabel is string && data.apartmentLabel.size() <= 80)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidInvite(data) {
+      return data.buildingId is string && data.buildingId.size() >= 1 && data.buildingId.size() <= 128 &&
+             data.buildingName is string && data.buildingName.size() >= 1 && data.buildingName.size() <= 120 &&
+             data.city is string && data.city.size() >= 1 && data.city.size() <= 80 &&
+             data.syndicUid is string && data.syndicUid.size() >= 1 && data.syndicUid.size() <= 128 &&
+             data.active is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidBuilding(data) {
+      return data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+             data.city is string && data.city.size() >= 2 && data.city.size() <= 80 &&
+             (!('neighborhood' in data) || (data.neighborhood is string && data.neighborhood.size() <= 100)) &&
+             data.floorCount is int && data.floorCount >= 1 && data.floorCount <= 100 &&
+             data.apartmentCount is int && data.apartmentCount >= 1 && data.apartmentCount <= 500 &&
+             data.defaultMonthlyFee is number && data.defaultMonthlyFee >= 0 && data.defaultMonthlyFee <= 100000 &&
+             data.reserveFundBalance is number && data.reserveFundBalance >= 0 && data.reserveFundBalance <= 100000000 &&
+             data.inviteCode is string && data.inviteCode.matches('^[A-Z0-9]{6}$') &&
+             data.syndicUid is string && data.syndicUid.size() >= 1 && data.syndicUid.size() <= 128 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidBuildingMember(data) {
+      return data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             (!('apartmentId' in data) || (data.apartmentId is string && data.apartmentId.size() <= 128)) &&
+             data.apartmentLabel is string && data.apartmentLabel.size() >= 1 && data.apartmentLabel.size() <= 80 &&
+             data.occupancyType in ['OWNER', 'TENANT'] &&
+             data.role in ['SYNDIC', 'DEPUTY', 'RESIDENT'] &&
+             data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+             (!('phoneKey' in data) || (data.phoneKey is string && data.phoneKey.size() <= 20)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidApartment(data) {
+      return data.unitNumber is string && data.unitNumber.size() >= 1 && data.unitNumber.size() <= 20 &&
+             data.floor is int && data.floor >= 0 && data.floor <= 100 &&
+             data.label is string && data.label.size() >= 1 && data.label.size() <= 80 &&
+             data.unitType in ['APARTMENT', 'SHOP', 'DUPLEX'] &&
+             data.monthlyFee is number && data.monthlyFee >= 0 && data.monthlyFee <= 100000 &&
+             (!('residentName' in data) || (data.residentName is string && data.residentName.size() <= 100)) &&
+             (!('residentPhone' in data) || (data.residentPhone is string && data.residentPhone.size() <= 30)) &&
+             (!('occupancyType' in data) || data.occupancyType in ['OWNER', 'TENANT']) &&
+             (!('residentUid' in data) || (data.residentUid is string && data.residentUid.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPayment(data) {
+      return data.apartmentId is string && data.apartmentId.size() >= 1 && data.apartmentId.size() <= 128 &&
+             data.apartmentLabel is string && data.apartmentLabel.size() >= 1 && data.apartmentLabel.size() <= 80 &&
+             data.monthKey is string && data.monthKey.matches('^20[2-9][0-9]-(0[1-9]|1[0-2])$') &&
+             data.amountMad is number && data.amountMad >= 0 && data.amountMad <= 100000 &&
+             data.status in ['PAID', 'PENDING', 'OVERDUE'] &&
+             (!('payerName' in data) || (data.payerName is string && data.payerName.size() <= 100)) &&
+             data.paymentMethod in ['CASH', 'TRANSFER', 'CHECK'] &&
+             (!('receiptNumber' in data) || (data.receiptNumber is string && data.receiptNumber.size() <= 40)) &&
+             (!('paidAtLabel' in data) || (data.paidAtLabel is string && data.paidAtLabel.size() <= 40)) &&
+             data.recordedByUid is string && data.recordedByUid.size() >= 1 && data.recordedByUid.size() <= 128 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidExpense(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+             data.category in ['CLEANING', 'SECURITY', 'UTILITIES', 'ELEVATOR', 'REPAIRS', 'OTHER'] &&
+             data.amountMad is number && data.amountMad > 0 && data.amountMad <= 10000000 &&
+             (!('vendorName' in data) || (data.vendorName is string && data.vendorName.size() <= 100)) &&
+             data.expenseDateLabel is string && data.expenseDateLabel.size() >= 1 && data.expenseDateLabel.size() <= 40 &&
+             data.invoicePhotoBase64 is string && data.invoicePhotoBase64.size() >= 1 && data.invoicePhotoBase64.size() <= 150000 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+             data.recordedByUid is string && data.recordedByUid.size() >= 1 && data.recordedByUid.size() <= 128 &&
+             data.recordedByName is string && data.recordedByName.size() >= 1 && data.recordedByName.size() <= 100 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidIssue(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+             data.description is string && data.description.size() >= 2 && data.description.size() <= 1000 &&
+             data.category in ['PLUMBING', 'ELECTRICAL', 'ELEVATOR', 'CLEANING', 'SECURITY', 'STRUCTURAL'] &&
+             data.urgency in ['NORMAL', 'URGENT', 'EMERGENCY'] &&
+             data.status in ['UNDER_REVIEW', 'IN_PROGRESS', 'RESOLVED'] &&
+             (!('photoBase64' in data) || (data.photoBase64 is string && data.photoBase64.size() <= 150000)) &&
+             data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+             (!('apartmentLabel' in data) || (data.apartmentLabel is string && data.apartmentLabel.size() <= 80)) &&
+             (!('repairCostNote' in data) || (data.repairCostNote is string && data.repairCostNote.size() <= 200)) &&
+             data.upvoteCount is int && data.upvoteCount >= 0 && data.upvoteCount <= 10000 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidIssueComment(data) {
+      return data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+             (!('apartmentLabel' in data) || (data.apartmentLabel is string && data.apartmentLabel.size() <= 80)) &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 500 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidAnnouncement(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+             data.body is string && data.body.size() >= 2 && data.body.size() <= 1500 &&
+             data.category in ['WATER', 'ELECTRICITY', 'ELEVATOR', 'CLEANING', 'GENERAL_ASSEMBLY', 'GENERAL'] &&
+             (!('targetAudience' in data) || data.targetAudience in ['ALL', 'UNPAID', 'OWNERS']) &&
+             data.pinned is bool &&
+             data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPoll(data) {
+      return data.question is string && data.question.size() >= 3 && data.question.size() <= 200 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 500)) &&
+             data.options is list && data.options.size() >= 2 && data.options.size() <= 6 &&
+             data.options[0] is string && data.options[0].size() >= 1 && data.options[0].size() <= 100 &&
+             data.closed is bool &&
+             data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidContact(data) {
+      return data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+             data.roleTitle is string && data.roleTitle.size() >= 2 && data.roleTitle.size() <= 80 &&
+             data.category in ['CONCIERGE', 'PLUMBER', 'ELECTRICIAN', 'ELEVATOR', 'EMERGENCY', 'SYNDIC'] &&
+             data.phone is string && data.phone.size() >= 2 && data.phone.size() <= 30 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 200)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidWork(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+             data.category in ['MAINTENANCE', 'CLEANING', 'ELEVATOR', 'PLUMBING', 'SECURITY', 'RENOVATION'] &&
+             (!('contractorName' in data) || (data.contractorName is string && data.contractorName.size() <= 100)) &&
+             (!('contractorPhone' in data) || (data.contractorPhone is string && data.contractorPhone.size() <= 30)) &&
+             data.estimatedCostMad is number && data.estimatedCostMad >= 0 && data.estimatedCostMad <= 10000000 &&
+             (!('dueDateLabel' in data) || (data.dueDateLabel is string && data.dueDateLabel.size() <= 40)) &&
+             data.status in ['PLANNED', 'IN_PROGRESS', 'COMPLETED'] &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+             data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidPreApprovedPhone(data) {
+      return data.phoneKey is string && data.phoneKey.matches('^[0-9]{6,20}$') &&
+             data.apartmentId is string && data.apartmentId.size() >= 1 && data.apartmentId.size() <= 128 &&
+             data.apartmentLabel is string && data.apartmentLabel.size() >= 1 && data.apartmentLabel.size() <= 80 &&
+             (!('residentName' in data) || (data.residentName is string && data.residentName.size() <= 100)) &&
+             data.occupancyType in ['OWNER', 'TENANT'] &&
+             data.addedByUid is string && data.addedByUid.size() >= 1 && data.addedByUid.size() <= 128 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidNotification(data) {
+      return data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+             data.body is string && data.body.size() >= 2 && data.body.size() <= 500 &&
+             data.type in ['ANNOUNCEMENT', 'WORK', 'ISSUE', 'PAYMENT', 'MEMBER_JOIN', 'GENERAL'] &&
+             (!('targetPhoneKey' in data) || (data.targetPhoneKey is string && data.targetPhoneKey.size() <= 20)) &&
+             data.senderUid is string && data.senderUid.size() >= 1 && data.senderUid.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100 &&
+             data.readByUids is list && data.readByUids.size() <= 500 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidResidentAccount(data) {
+      return data.phoneKey is string && data.phoneKey.matches('^[0-9]{6,20}$') &&
+             data.displayPhone is string && data.displayPhone.size() >= 6 && data.displayPhone.size() <= 30 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             data.passwordHash is string && data.passwordHash.matches('^[a-f0-9]{64}$') &&
+             (!('recoveryCodeHash' in data) || (data.recoveryCodeHash is string && data.recoveryCodeHash.size() <= 64)) &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             data.buildingIds is list && data.buildingIds.size() <= 100 &&
+             (!('apartmentLabels' in data) || (data.apartmentLabels is list && data.apartmentLabels.size() <= 100)) &&
+             (!('recoveryVerifiedAt' in data) || isValidTimestamp(data.recoveryVerifiedAt)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    // --- COLLECTION RULES ---
+
+    match /users/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().userId == userId &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'preferredLang', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'phone', 'preferredLang', 'activeBuildingId', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming());
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'phone', 'preferredLang', 'activeBuildingId', 'updatedAt']);
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /memberships/{buildingId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+                         isValidId(buildingId) &&
+                         incoming().buildingId == buildingId &&
+                         incoming().keys().hasAll(['buildingId', 'buildingName', 'city', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['buildingId', 'buildingName', 'city', 'apartmentLabel', 'createdAt', 'updatedAt']) &&
+                         isValidUserMembership(incoming());
+        allow update: if isOwner(userId) &&
+                         isValidId(buildingId) &&
+                         incoming().buildingId == existing().buildingId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidUserMembership(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['buildingName', 'city', 'apartmentLabel', 'updatedAt']);
+        allow delete: if isOwner(userId) && isValidId(buildingId);
+      }
+    }
+
+    match /invites/{inviteCode} {
+      allow get: if isSignedIn() && isValidId(inviteCode);
+      allow create: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       inviteCode.matches('^[A-Z0-9]{6}$') &&
+                       isValidInvite(incoming()) &&
+                       incoming().syndicUid == request.auth.uid &&
+                       incoming().keys().hasAll(['buildingId', 'buildingName', 'city', 'syndicUid', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['buildingId', 'buildingName', 'city', 'syndicUid', 'active', 'createdAt', 'updatedAt']) &&
+                       exists(/databases/$(database)/documents/buildings/$(incoming().buildingId)) &&
+                       getBuilding(incoming().buildingId).syndicUid == request.auth.uid;
+      allow update: if isSignedIn() &&
+                       isValidId(inviteCode) &&
+                       isValidInvite(incoming()) &&
+                       isSyndic(existing().buildingId) &&
+                       incoming().buildingId == existing().buildingId &&
+                       incoming().syndicUid == existing().syndicUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['buildingName', 'city', 'active', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(inviteCode) && isSyndic(existing().buildingId);
+    }
+
+    match /residentAccounts/{phoneKey} {
+      allow get: if isSignedIn() && isValidId(phoneKey) && phoneKey.matches('^[0-9]{6,20}$');
+      allow create: if isSignedIn() &&
+                       isValidId(phoneKey) &&
+                       incoming().phoneKey == phoneKey &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().keys().hasAll(['phoneKey', 'displayPhone', 'displayName', 'passwordHash', 'ownerUid', 'buildingIds', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['phoneKey', 'displayPhone', 'displayName', 'passwordHash', 'recoveryCodeHash', 'ownerUid', 'buildingIds', 'apartmentLabels', 'recoveryVerifiedAt', 'createdAt', 'updatedAt']) &&
+                       isValidResidentAccount(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(phoneKey) &&
+                       incoming().phoneKey == existing().phoneKey &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidResidentAccount(incoming()) &&
+                       (
+                         existing().ownerUid == request.auth.uid ||
+                         (
+                           incoming().ownerUid == request.auth.uid &&
+                           'recoveryVerifiedAt' in incoming() &&
+                           isValidTimestamp(incoming().recoveryVerifiedAt)
+                         )
+                       ) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayPhone', 'displayName', 'passwordHash', 'recoveryCodeHash', 'ownerUid', 'buildingIds', 'apartmentLabels', 'recoveryVerifiedAt', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(phoneKey) && existing().ownerUid == request.auth.uid;
+    }
+
+    match /buildings/{buildingId} {
+      allow get: if isSignedIn() &&
+                    isValidId(buildingId) &&
+                    (resource.data.syndicUid == request.auth.uid || isApprovedMember(buildingId));
+      allow create: if isSignedIn() &&
+                       isValidId(buildingId) &&
+                       isValidBuilding(incoming()) &&
+                       incoming().syndicUid == request.auth.uid &&
+                       incoming().keys().hasAll(['name', 'city', 'floorCount', 'apartmentCount', 'defaultMonthlyFee', 'reserveFundBalance', 'inviteCode', 'syndicUid', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['name', 'city', 'neighborhood', 'floorCount', 'apartmentCount', 'defaultMonthlyFee', 'reserveFundBalance', 'inviteCode', 'syndicUid', 'createdAt', 'updatedAt']);
+      allow update: if isSignedIn() &&
+                       isValidId(buildingId) &&
+                       isValidBuilding(incoming()) &&
+                       isSyndicOrDeputy(buildingId) &&
+                       incoming().syndicUid == existing().syndicUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'city', 'neighborhood', 'floorCount', 'apartmentCount', 'defaultMonthlyFee', 'reserveFundBalance', 'inviteCode', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(buildingId) && isSyndic(buildingId);
+
+      match /members/{memberUid} {
+        allow get: if isSignedIn() && isValidId(memberUid) && (request.auth.uid == memberUid || isApprovedMember(buildingId));
+        allow list: if isSignedIn() && isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(memberUid) &&
+                         request.auth.uid == memberUid &&
+                         incoming().uid == memberUid &&
+                         incoming().keys().hasAll(['uid', 'displayName', 'apartmentLabel', 'occupancyType', 'role', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['uid', 'displayName', 'apartmentId', 'apartmentLabel', 'occupancyType', 'role', 'status', 'phone', 'phoneKey', 'createdAt', 'updatedAt']) &&
+                         isValidBuildingMember(incoming()) &&
+                         (
+                           (incoming().role == 'SYNDIC' && incoming().status == 'APPROVED' && getBuilding(buildingId).syndicUid == request.auth.uid) ||
+                           (incoming().role == 'RESIDENT' && incoming().status == 'PENDING' && exists(/databases/$(database)/documents/buildings/$(buildingId))) ||
+                           (incoming().role == 'RESIDENT' && incoming().status == 'APPROVED' && 'phoneKey' in incoming() && incoming().phoneKey.matches('^[0-9]{6,20}$') && exists(/databases/$(database)/documents/buildings/$(buildingId)/preApprovedPhones/$(incoming().phoneKey)))
+                         );
+        allow update: if isSignedIn() &&
+                         isValidId(memberUid) &&
+                         isValidBuildingMember(incoming()) &&
+                         incoming().uid == existing().uid &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           (isSyndic(buildingId) && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'status', 'apartmentId', 'apartmentLabel', 'occupancyType', 'updatedAt'])) ||
+                           (isSyndicOrDeputy(buildingId) && existing().role != 'SYNDIC' && incoming().role == 'RESIDENT' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'apartmentId', 'apartmentLabel', 'occupancyType', 'updatedAt'])) ||
+                           (request.auth.uid == memberUid && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'updatedAt']))
+                         );
+        allow delete: if isSignedIn() && isValidId(memberUid) && ((isSyndic(buildingId) && memberUid != request.auth.uid) || request.auth.uid == memberUid);
+      }
+
+      match /apartments/{apartmentId} {
+        allow get, list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(apartmentId) &&
+                         isValidApartment(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().keys().hasAll(['unitNumber', 'floor', 'label', 'unitType', 'monthlyFee', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['unitNumber', 'floor', 'label', 'unitType', 'monthlyFee', 'residentName', 'residentPhone', 'occupancyType', 'residentUid', 'createdAt', 'updatedAt']);
+        allow update: if isSignedIn() &&
+                         isValidId(apartmentId) &&
+                         isValidApartment(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['unitNumber', 'floor', 'label', 'unitType', 'monthlyFee', 'residentName', 'residentPhone', 'occupancyType', 'residentUid', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(apartmentId) && isSyndicOrDeputy(buildingId);
+      }
+
+      match /payments/{paymentId} {
+        allow get, list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(paymentId) &&
+                         isValidPayment(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().recordedByUid == request.auth.uid &&
+                         incoming().keys().hasAll(['apartmentId', 'apartmentLabel', 'monthKey', 'amountMad', 'status', 'paymentMethod', 'recordedByUid', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['apartmentId', 'apartmentLabel', 'monthKey', 'amountMad', 'status', 'payerName', 'paymentMethod', 'receiptNumber', 'paidAtLabel', 'recordedByUid', 'createdAt', 'updatedAt']);
+        allow update: if isSignedIn() &&
+                         isValidId(paymentId) &&
+                         isValidPayment(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().recordedByUid == request.auth.uid &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['amountMad', 'status', 'payerName', 'paymentMethod', 'receiptNumber', 'paidAtLabel', 'recordedByUid', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(paymentId) && isSyndicOrDeputy(buildingId);
+      }
+
+      match /expenses/{expenseId} {
+        allow get, list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(expenseId) &&
+                         isValidExpense(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().recordedByUid == request.auth.uid &&
+                         incoming().keys().hasAll(['title', 'category', 'amountMad', 'expenseDateLabel', 'invoicePhotoBase64', 'recordedByUid', 'recordedByName', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['title', 'category', 'amountMad', 'vendorName', 'expenseDateLabel', 'invoicePhotoBase64', 'notes', 'recordedByUid', 'recordedByName', 'createdAt', 'updatedAt']);
+        allow update: if isSignedIn() &&
+                         isValidId(expenseId) &&
+                         isValidExpense(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().recordedByUid == existing().recordedByUid &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'amountMad', 'vendorName', 'expenseDateLabel', 'invoicePhotoBase64', 'notes', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(expenseId) && isSyndicOrDeputy(buildingId);
+      }
+
+      match /issues/{issueId} {
+        allow get, list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(issueId) &&
+                         isValidIssue(incoming()) &&
+                         isApprovedMember(buildingId) &&
+                         incoming().authorUid == request.auth.uid &&
+                         incoming().status == 'UNDER_REVIEW' &&
+                         incoming().upvoteCount == 0 &&
+                         incoming().keys().hasAll(['title', 'description', 'category', 'urgency', 'status', 'authorUid', 'authorName', 'upvoteCount', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['title', 'description', 'category', 'urgency', 'status', 'photoBase64', 'authorUid', 'authorName', 'apartmentLabel', 'repairCostNote', 'upvoteCount', 'createdAt', 'updatedAt']);
+        allow update: if isSignedIn() &&
+                         isValidId(issueId) &&
+                         isValidIssue(incoming()) &&
+                         isApprovedMember(buildingId) &&
+                         incoming().authorUid == existing().authorUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           (isSyndicOrDeputy(buildingId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'repairCostNote', 'urgency', 'updatedAt'])) ||
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['upvoteCount', 'updatedAt']) && (incoming().upvoteCount == existing().upvoteCount + 1 || incoming().upvoteCount == existing().upvoteCount - 1))
+                         );
+        allow delete: if isSignedIn() && isValidId(issueId) && (isSyndicOrDeputy(buildingId) || (isApprovedMember(buildingId) && existing().authorUid == request.auth.uid));
+
+        match /upvotes/{uid} {
+          allow get, list: if isApprovedMember(buildingId);
+          allow create: if isSignedIn() &&
+                           isValidId(uid) &&
+                           request.auth.uid == uid &&
+                           isApprovedMember(buildingId) &&
+                           incoming().uid == uid &&
+                           incoming().keys().hasAll(['uid', 'createdAt']) &&
+                           incoming().keys().hasOnly(['uid', 'createdAt']) &&
+                           isValidTimestamp(incoming().createdAt);
+          allow delete: if isSignedIn() && isValidId(uid) && request.auth.uid == uid && isApprovedMember(buildingId);
+        }
+
+        match /comments/{commentId} {
+          allow get, list: if isApprovedMember(buildingId);
+          allow create: if isSignedIn() &&
+                           isValidId(commentId) &&
+                           isApprovedMember(buildingId) &&
+                           incoming().authorUid == request.auth.uid &&
+                           incoming().keys().hasAll(['authorUid', 'authorName', 'text', 'createdAt']) &&
+                           incoming().keys().hasOnly(['authorUid', 'authorName', 'apartmentLabel', 'text', 'createdAt']) &&
+                           isValidIssueComment(incoming());
+          allow delete: if isSignedIn() && isValidId(commentId) && (isSyndicOrDeputy(buildingId) || (isApprovedMember(buildingId) && existing().authorUid == request.auth.uid));
+        }
+      }
+
+      match /announcements/{announcementId} {
+        allow get, list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(announcementId) &&
+                         isValidAnnouncement(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().authorUid == request.auth.uid &&
+                         incoming().keys().hasAll(['title', 'body', 'category', 'pinned', 'authorUid', 'authorName', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['title', 'body', 'category', 'targetAudience', 'pinned', 'authorUid', 'authorName', 'createdAt', 'updatedAt']);
+        allow update: if isSignedIn() &&
+                         isValidId(announcementId) &&
+                         isValidAnnouncement(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().authorUid == existing().authorUid &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'body', 'category', 'targetAudience', 'pinned', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(announcementId) && isSyndicOrDeputy(buildingId);
+      }
+
+      match /polls/{pollId} {
+        allow get, list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(pollId) &&
+                         isValidPoll(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().authorUid == request.auth.uid &&
+                         incoming().closed == false &&
+                         incoming().keys().hasAll(['question', 'options', 'closed', 'authorUid', 'authorName', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['question', 'description', 'options', 'closed', 'authorUid', 'authorName', 'createdAt', 'updatedAt']);
+        allow update: if isSignedIn() &&
+                         isValidId(pollId) &&
+                         isValidPoll(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().authorUid == existing().authorUid &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['closed', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(pollId) && isSyndicOrDeputy(buildingId);
+
+        match /votes/{uid} {
+          allow get, list: if isApprovedMember(buildingId);
+          allow create: if isSignedIn() &&
+                           isValidId(uid) &&
+                           request.auth.uid == uid &&
+                           isApprovedMember(buildingId) &&
+                           get(/databases/$(database)/documents/buildings/$(buildingId)/polls/$(pollId)).data.closed == false &&
+                           incoming().uid == uid &&
+                           incoming().optionIndex is int &&
+                           incoming().optionIndex >= 0 &&
+                           incoming().optionIndex < get(/databases/$(database)/documents/buildings/$(buildingId)/polls/$(pollId)).data.options.size() &&
+                           incoming().keys().hasAll(['uid', 'optionIndex', 'createdAt']) &&
+                           incoming().keys().hasOnly(['uid', 'optionIndex', 'createdAt']) &&
+                           isValidTimestamp(incoming().createdAt);
+          allow update: if isSignedIn() &&
+                           isValidId(uid) &&
+                           request.auth.uid == uid &&
+                           isApprovedMember(buildingId) &&
+                           get(/databases/$(database)/documents/buildings/$(buildingId)/polls/$(pollId)).data.closed == false &&
+                           incoming().uid == uid &&
+                           incoming().optionIndex is int &&
+                           incoming().optionIndex >= 0 &&
+                           incoming().optionIndex < get(/databases/$(database)/documents/buildings/$(buildingId)/polls/$(pollId)).data.options.size() &&
+                           incoming().createdAt == existing().createdAt &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['optionIndex']);
+          allow delete: if isSignedIn() && isValidId(uid) && request.auth.uid == uid && isApprovedMember(buildingId);
+        }
+      }
+
+      match /contacts/{contactId} {
+        allow get, list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(contactId) &&
+                         isValidContact(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().keys().hasAll(['name', 'roleTitle', 'category', 'phone', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['name', 'roleTitle', 'category', 'phone', 'notes', 'createdAt', 'updatedAt']);
+        allow update: if isSignedIn() &&
+                         isValidId(contactId) &&
+                         isValidContact(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'roleTitle', 'category', 'phone', 'notes', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(contactId) && isSyndicOrDeputy(buildingId);
+      }
+
+      match /works/{workId} {
+        allow get, list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(workId) &&
+                         isValidWork(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().authorUid == request.auth.uid &&
+                         incoming().keys().hasAll(['title', 'category', 'estimatedCostMad', 'status', 'authorUid', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['title', 'category', 'contractorName', 'contractorPhone', 'estimatedCostMad', 'dueDateLabel', 'status', 'notes', 'authorUid', 'createdAt', 'updatedAt']);
+        allow update: if isSignedIn() &&
+                         isValidId(workId) &&
+                         isValidWork(incoming()) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().authorUid == existing().authorUid &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'contractorName', 'contractorPhone', 'estimatedCostMad', 'dueDateLabel', 'status', 'notes', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(workId) && isSyndicOrDeputy(buildingId);
+      }
+
+      match /preApprovedPhones/{phoneKey} {
+        allow get: if isSignedIn() && isValidId(phoneKey) && phoneKey.matches('^[0-9]{6,20}$');
+        allow list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(phoneKey) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().phoneKey == phoneKey &&
+                         incoming().addedByUid == request.auth.uid &&
+                         incoming().keys().hasAll(['phoneKey', 'apartmentId', 'apartmentLabel', 'occupancyType', 'addedByUid', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['phoneKey', 'apartmentId', 'apartmentLabel', 'residentName', 'occupancyType', 'addedByUid', 'createdAt', 'updatedAt']) &&
+                         isValidPreApprovedPhone(incoming());
+        allow update: if isSignedIn() &&
+                         isValidId(phoneKey) &&
+                         isSyndicOrDeputy(buildingId) &&
+                         incoming().phoneKey == existing().phoneKey &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidPreApprovedPhone(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['apartmentId', 'apartmentLabel', 'residentName', 'occupancyType', 'addedByUid', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(phoneKey) && isSyndicOrDeputy(buildingId);
+      }
+
+      match /notifications/{notifId} {
+        allow get, list: if isApprovedMember(buildingId);
+        allow create: if isSignedIn() &&
+                         isValidId(notifId) &&
+                         isApprovedMember(buildingId) &&
+                         incoming().senderUid == request.auth.uid &&
+                         incoming().keys().hasAll(['title', 'body', 'type', 'senderUid', 'senderName', 'readByUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['title', 'body', 'type', 'targetPhoneKey', 'senderUid', 'senderName', 'readByUids', 'createdAt', 'updatedAt']) &&
+                         isValidNotification(incoming());
+        allow update: if isSignedIn() &&
+                         isValidId(notifId) &&
+                         isApprovedMember(buildingId) &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().senderUid == existing().senderUid &&
+                         isValidNotification(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['readByUids', 'updatedAt']);
+        allow delete: if isSignedIn() && isValidId(notifId) && isSyndicOrDeputy(buildingId);
+      }
+    }
+  }
+}
